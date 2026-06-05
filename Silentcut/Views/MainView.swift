@@ -5,6 +5,7 @@ import AVKit
 /// Coordinates the left Sidebar, center editing workspace/player, and right Inspector pane.
 public struct MainView: View {
     @State private var viewModel = MainViewModel()
+    @State private var isShowingQueuePopover = false
     
     public init() {}
     
@@ -20,6 +21,19 @@ public struct MainView: View {
         }
         .frame(minWidth: 950, minHeight: 650)
         .toolbar {
+            // Batch Queue button
+            ToolbarItem(placement: .primaryAction) {
+                Button(action: {
+                    isShowingQueuePopover.toggle()
+                }) {
+                    Label("Batch Queue", systemImage: "square.stack.3d.down.right")
+                }
+                .popover(isPresented: $isShowingQueuePopover, arrowEdge: .bottom) {
+                    QueueView(viewModel: viewModel)
+                }
+                .help("Show background batch processing queue")
+            }
+            
             // Import File button
             ToolbarItem(placement: .primaryAction) {
                 Button(action: {
@@ -102,7 +116,7 @@ struct CenterWorkspaceView: View {
                             Spacer()
                         }
                         
-                        VideoPreviewPlayer(url: selectedVideo.fileURL)
+                        VideoPreviewPlayer(url: selectedVideo.fileURL, viewModel: viewModel)
                             .frame(minHeight: 240, maxHeight: .infinity)
                             .background(Color.black)
                             .cornerRadius(8)
@@ -212,6 +226,7 @@ struct CenterWorkspaceView: View {
 // MARK: - Native Video Player Helper
 struct VideoPreviewPlayer: View {
     let url: URL
+    @Bindable var viewModel: MainViewModel
     @State private var player: AVPlayer?
     
     var body: some View {
@@ -223,15 +238,20 @@ struct VideoPreviewPlayer: View {
             }
         }
         .onAppear {
-            player = AVPlayer(url: url)
+            let p = AVPlayer(url: url)
+            player = p
+            viewModel.player = p
         }
         .onDisappear {
             player?.pause()
             player = nil
+            viewModel.player = nil
         }
         .onChange(of: url) { _, newURL in
             player?.pause()
-            player = AVPlayer(url: newURL)
+            let p = AVPlayer(url: newURL)
+            player = p
+            viewModel.player = p
         }
     }
 }
@@ -307,12 +327,12 @@ struct WaveformView: View {
                             .offset(x: xStart)
                     }
                     
-                    // Draw Silence Cuts Regions (soft red backgrounds)
+                    // Draw Silence Cuts Regions (soft red/orange backgrounds)
                     ForEach(silenceRegions) { segment in
                         let xStart = CGFloat(segment.start / duration) * width
                         let xEnd = CGFloat(segment.end / duration) * width
                         Rectangle()
-                            .fill(Color.red.opacity(0.14))
+                            .fill(segment.confidence < 0.65 ? Color.orange.opacity(0.14) : Color.red.opacity(0.14))
                             .frame(width: max(1, xEnd - xStart))
                             .offset(x: xStart)
                     }
@@ -330,10 +350,18 @@ struct WaveformView: View {
                         
                         // Check if this visual segment falls inside any padded silence region
                         let barTime = (Double(index) / Double(targetCount)) * duration
-                        let isSilent = silenceRegions.contains { barTime >= $0.start && barTime <= $0.end }
+                        let matchingSilence = silenceRegions.first { barTime >= $0.start && barTime <= $0.end }
+                        
+                        let barColor: Color = {
+                            if let silence = matchingSilence {
+                                return silence.confidence < 0.65 ? Color.orange.opacity(0.65) : Color.red.opacity(0.55)
+                            } else {
+                                return Color.blue.opacity(0.65)
+                            }
+                        }()
                         
                         Capsule()
-                            .fill(isSilent ? Color.red.opacity(0.55) : Color.blue.opacity(0.65))
+                            .fill(barColor)
                             .frame(height: max(3, barHeight))
                     }
                 }

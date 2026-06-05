@@ -153,4 +153,111 @@ struct SilenceEditorTests {
             Issue.record("FCPXML generation failed: \(error)")
         }
     }
+    
+    @Test("Test AdaptiveThreshold estimation")
+    func testAdaptiveThreshold() {
+        let estimator = AdaptiveThreshold()
+        
+        // Test empty input -> should return -35.0
+        #expect(estimator.estimateThreshold(rmsValues: []) == -35.0)
+        
+        // Test normal values
+        // 100 elements: 15 elements at -50dB, rest at -20dB.
+        // noiseFloorIndex = Int(100 * 0.15) = 15. Sorted will have -50dB at index 15.
+        // Suggested = -50 + 8 = -42dB.
+        let rmsValues = Array(repeating: Float(-20.0), count: 80) + Array(repeating: Float(-50.0), count: 20)
+        #expect(estimator.estimateThreshold(rmsValues: rmsValues) == -42.0)
+    }
+    
+    @Test("Test DiagnosticReporter overlap warnings and errors")
+    func testDiagnosticReporter() {
+        let reporter = DiagnosticReporter()
+        let video = VideoFile(
+            fileURL: URL(fileURLWithPath: "/tmp/IMG_7527.MOV"),
+            filename: "IMG_7527.MOV",
+            duration: 30.0,
+            frameRate: 29.97,
+            resolution: CGSize(width: 1920, height: 1080),
+            audioTrackCount: 1,
+            videoTrackCount: 1,
+            fileSize: 10_000_000
+        )
+        
+        // 1. Success case
+        let validKeeps = [
+            KeepSegment(start: 0.0, end: 10.0),
+            KeepSegment(start: 12.0, end: 20.0)
+        ]
+        let validReport = reporter.runDiagnostics(video: video, keepSegments: validKeeps, silenceRegions: [])
+        #expect(validReport.isSuccess)
+        #expect(validReport.issues.isEmpty)
+        #expect(validReport.finalDuration == 18.0)
+        
+        // 2. Overlap case
+        let overlapKeeps = [
+            KeepSegment(start: 0.0, end: 10.0),
+            KeepSegment(start: 9.0, end: 20.0) // starts before 10.0 -> overlap!
+        ]
+        let overlapReport = reporter.runDiagnostics(video: video, keepSegments: overlapKeeps, silenceRegions: [])
+        #expect(!overlapReport.isSuccess)
+        #expect(overlapReport.issues.contains { $0.contains("Overlap Error") })
+        
+        // 3. Out-of-bounds case
+        let oobKeeps = [
+            KeepSegment(start: 0.0, end: 35.0) // exceeds video duration 30.0
+        ]
+        let oobReport = reporter.runDiagnostics(video: video, keepSegments: oobKeeps, silenceRegions: [])
+        #expect(!oobReport.isSuccess)
+        #expect(oobReport.issues.contains { $0.contains("Boundary Error") })
+    }
+    
+    @Test("Test FCP 7 XML generation for Premiere Pro")
+    func testFCP7XMLGeneration() {
+        let engine = ExportEngine()
+        let video = VideoFile(
+            fileURL: URL(fileURLWithPath: "/tmp/IMG_7527.MOV"),
+            filename: "IMG_7527.MOV",
+            duration: 30.0,
+            frameRate: 30.0,
+            resolution: CGSize(width: 1920, height: 1080),
+            audioTrackCount: 1,
+            videoTrackCount: 1,
+            fileSize: 10_000_000
+        )
+        
+        let keeps = [
+            KeepSegment(start: 0.0, end: 10.0),
+            KeepSegment(start: 12.0, end: 20.0)
+        ]
+        
+        do {
+            let xml = try engine.generateTimelineXML(for: video, keepSegments: keeps, target: .premierePro)
+            
+            // Check headers
+            #expect(xml.contains("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"))
+            #expect(xml.contains("<!DOCTYPE xmeml>"))
+            #expect(xml.contains("<xmeml version=\"5\">"))
+            #expect(xml.contains("<project>"))
+            #expect(xml.contains("<sequence id=\"sequence-1\">"))
+            
+            // Check clipitem elements
+            #expect(xml.contains("<clipitem id=\"clipitem-1\">"))
+            #expect(xml.contains("<clipitem id=\"clipitem-2\">"))
+            
+            // Check frame indices (30.0 fps)
+            #expect(xml.contains("<in>0</in>"))
+            #expect(xml.contains("<out>300</out>"))
+            #expect(xml.contains("<start>0</start>"))
+            #expect(xml.contains("<end>300</end>"))
+            
+            #expect(xml.contains("<in>360</in>"))
+            #expect(xml.contains("<out>600</out>"))
+            #expect(xml.contains("<start>300</start>"))
+            #expect(xml.contains("<end>540</end>"))
+            
+            #expect(xml.contains("<timebase>30</timebase>"))
+        } catch {
+            Issue.record("FCP 7 XML generation failed: \(error)")
+        }
+    }
 }

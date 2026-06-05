@@ -6,15 +6,18 @@ public struct SilenceRegion: Sendable, Identifiable, Hashable, Equatable {
     public let id: UUID
     public let start: Double
     public let end: Double
+    /// Visual confidence score between 0.0 and 1.0 (Stage 9)
+    public let confidence: Double
     
     public var duration: Double {
         end - start
     }
     
-    public init(id: UUID = UUID(), start: Double, end: Double) {
+    public init(id: UUID = UUID(), start: Double, end: Double, confidence: Double = 1.0) {
         self.id = id
         self.start = start
         self.end = end
+        self.confidence = confidence
     }
 }
 
@@ -112,9 +115,16 @@ public struct SilenceDetector: SilenceDetectorProtocol, Sendable {
                 if let startIdx = activeSilenceStart {
                     let duration = Double(index - startIdx) * chunkDuration
                     if duration >= minSilenceDuration {
+                        // Calculate confidence score (depth below threshold) (Stage 9)
+                        let slice = rmsValues[startIdx..<index]
+                        let avgDb = slice.reduce(0.0, +) / Float(slice.count)
+                        let depth = thresholdDB - avgDb
+                        let confidence = Double(max(0.2, min(1.0, depth / 15.0)))
+                        
                         silenceRegions.append(SilenceRegion(
                             start: Double(startIdx) * chunkDuration,
-                            end: Double(index) * chunkDuration
+                            end: Double(index) * chunkDuration,
+                            confidence: confidence
                         ))
                     }
                     activeSilenceStart = nil
@@ -126,9 +136,15 @@ public struct SilenceDetector: SilenceDetectorProtocol, Sendable {
         if let startIdx = activeSilenceStart {
             let duration = Double(rmsValues.count - startIdx) * chunkDuration
             if duration >= minSilenceDuration {
+                let slice = rmsValues[startIdx..<rmsValues.count]
+                let avgDb = slice.reduce(0.0, +) / Float(slice.count)
+                let depth = thresholdDB - avgDb
+                let confidence = Double(max(0.2, min(1.0, depth / 15.0)))
+                
                 silenceRegions.append(SilenceRegion(
                     start: Double(startIdx) * chunkDuration,
-                    end: Double(rmsValues.count) * chunkDuration
+                    end: Double(rmsValues.count) * chunkDuration,
+                    confidence: confidence
                 ))
             }
         }

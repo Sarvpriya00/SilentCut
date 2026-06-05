@@ -69,6 +69,14 @@ public struct SidebarView: View {
                         .padding(.vertical, 4)
                         .tag(video)
                         .contextMenu {
+                            Button {
+                                viewModel.queueManager.enqueue(video: video)
+                            } label: {
+                                Label("Add to Background Queue", systemImage: "bolt.horizontal.fill")
+                            }
+                            
+                            Divider()
+                            
                             Button(role: .destructive) {
                                 viewModel.deleteVideo(video)
                             } label: {
