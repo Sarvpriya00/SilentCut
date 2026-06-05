@@ -1,0 +1,47 @@
+# ==========================================
+# macOS System Files
+# ==========================================
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon\r
+._*
+.Spotlight-V100
+.Trashes
+*.icedb
+
+# ==========================================
+# Xcode Build & State Files
+# ==========================================
+build/
+DerivedData/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcworkspace/xcuserdata/
+*.xcuserstate
+*.xccheckout
+*.xcscmblueprint
+xsan-manifest.plist
+
+# ==========================================
+# Swift Package Manager (SPM)
+# ==========================================
+.build/
+Packages/
+Package.resolved
+
+# ==========================================
+# Temporary Exports & Local Media Files
+# ==========================================
+# Ignore generated final cut XML exports
+*.fcpxml
+
+# Ignore temporary raw audio extracts or media test templates
+*.mp3
+*.wav
+*.aac
+*.m4a
+# Note: Keep video project assets tracked manually if needed; otherwise ignore:
+# *.mp4
+# *.mov
+# *.m4v
